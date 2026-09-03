@@ -10,7 +10,6 @@ Serviço HTTP em Go, executado em containers Docker e acessível por meio de um
 proxy reverso Nginx. O projeto inclui monitoramento com Prometheus e Grafana e
 provisionamento automatizado com Ansible.
 
-> **Documentação técnica:** [guia completo de decisões técnicas em PDF](docs/decisoes-tecnicas.pdf) | [versão Markdown](docs/decisoes-tecnicas.md) | [defesa técnica para entrevista](docs/defesa-tecnica-entrevista.md)
 
 ## Visão geral
 
