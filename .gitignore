@@ -1,0 +1,11 @@
+# Chaves e inventarios locais do Ansible.
+*.pem
+ansible/inventory.ini
+
+# Artefatos Go.
+/main
+coverage.out
+
+# Arquivos de ambiente e IDE.
+.env
+.vscode/

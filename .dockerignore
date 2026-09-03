@@ -1,0 +1,13 @@
+# Evita enviar metadados e credenciais ao contexto do build.
+.git
+.github
+.terraform
+*.tfstate
+*.tfvars
+ansible
+terraform
+grafana
+prometheus
+nginx
+README.md
+main_test.go

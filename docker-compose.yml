@@ -1,0 +1,134 @@
+# docker-compose.yml - http-server-projeto-korp
+#
+# Arquitetura:
+#   [ cliente / navegador ]
+#            |
+#            |  http://localhost:80
+#            v
+#   [ container: nginx ]  <-- única porta exposta ao host (80)
+#            |
+#            |  proxy reverso, via rede interna Docker
+#            |  http://http-server-projeto-korp:8080
+#            v
+#   [ container: http-server-projeto-korp ]  <-- não exposto ao host
+#
+# O NGINX funciona como "porta de entrada" (proxy reverso): é o único
+# container acessível de fora do Docker. A aplicação Go fica isolada,
+# só acessível pelos outros containers que estiverem na mesma rede.
+
+services:
+  # Serviço 1: aplicação Go (http-server-projeto-korp)
+  http-server-projeto-korp:
+    # construímos a imagem a partir
+    # do Dockerfile presente no diretório atual.
+    build: .
+
+    # Nome fixo do container, para facilitar identificação
+    container_name: http-server-projeto-korp
+
+    # Conecta este serviço à rede "korp-network".
+    networks:
+      - korp-network
+
+    # Propositalmente NÃO existe uma seção "ports" aqui.
+    # Isso significa que a porta 8080 da aplicação NÃO é exposta para
+    # o host, só é acessível de dentro da rede Docker.
+
+  # Serviço 2: NGINX (proxy reverso)
+  nginx:
+    # Usa a imagem oficial do NGINX diretamente do Docker Hub,
+    # na versão alpine.
+    image: nginx:alpine
+
+    container_name: nginx
+
+    # Conecta o NGINX à mesma rede da aplicação Go.
+    networks:
+      - korp-network
+
+    # Mapeia a porta 80 do HOST para a porta 80 do
+    # container do NGINX.
+    ports:
+      - "80:80"
+
+    # Monta o arquivo de configuração local do NGINX para
+    # dentro do container, no diretório onde o NGINX procura
+    # automaticamente por configurações adicionais (/etc/nginx/conf.d/).
+
+    volumes:
+      - ./nginx/http-server-projeto-korp.conf:/etc/nginx/conf.d/default.conf:ro
+
+    # Garante que o container da aplicação Go suba antes do NGINX.
+
+    depends_on:
+      - http-server-projeto-korp
+
+  # Exporta as metricas do Nginx para o formato Prometheus.
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.2
+    container_name: nginx-exporter
+    networks:
+      - korp-network
+    command:
+      - "--nginx.scrape-uri=http://nginx/nginx_status"
+    depends_on:
+      - nginx
+
+  # Serviço 3: Prometheus, responsável por coletar e armazenar as métricas.
+  prometheus:
+    # Imagem oficial com versão fixa para reproduzir o ambiente.
+    image: prom/prometheus:v2.54.1
+    # Nome fixo usado para facilitar a administração do container.
+    container_name: prometheus
+    # Permite que o Grafana e a aplicação se comuniquem com o Prometheus.
+    networks:
+      - korp-network
+    # Expõe a interface web do Prometheus para acesso local.
+    ports:
+      - "9090:9090"
+    # Substitui a configuração padrão pela configuração versionada do projeto.
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # Define o arquivo de configuração, o diretório de dados e o reload HTTP.
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    # O alvo precisa estar iniciado antes da coleta começar.
+    depends_on:
+      - http-server-projeto-korp
+
+  # Serviço 4: Grafana, responsável por consultar e exibir as métricas.
+  grafana:
+    # Imagem oficial com versão fixa para manter o dashboard reproduzível.
+    image: grafana/grafana:11.2.0
+    # Nome fixo usado para facilitar a administração do container.
+    container_name: grafana
+    # Coloca o Grafana na mesma rede do Prometheus.
+    networks:
+      - korp-network
+    # Expõe a interface web do Grafana para acesso local.
+    ports:
+      - "3000:3000"
+    # Define credenciais locais e impede criação pública de contas.
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    # Monta o datasource, o provider e o dashboard provisionados pelo projeto.
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    # O datasource do Grafana depende do Prometheus estar iniciado.
+    depends_on:
+      - prometheus
+
+# Rede privada compartilhada pelos quatro serviços.
+networks:
+  # O driver bridge fornece DNS interno entre os containers.
+  korp-network:
+    # Nome fixo usado pelo playbook Ansible e pelos servicos Docker.
+    name: korp-network
+    # A rede e criada explicitamente pelo playbook antes do Compose.
+    external: true
+    driver: bridge

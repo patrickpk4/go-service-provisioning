@@ -1,0 +1,19 @@
+# Versão do formato de provisionamento aceito pelo Grafana.
+apiVersion: 1
+
+# Datasources criados automaticamente na inicialização do Grafana.
+datasources:
+  # Datasource usado por todos os painéis do dashboard do Projeto Korp.
+  - name: Prometheus
+    # UID fixo referenciado pelo arquivo JSON do dashboard.
+    uid: prometheus
+    # Tipo de banco de dados de séries temporais utilizado.
+    type: prometheus
+    # O Grafana faz as consultas pelo próprio servidor, dentro da rede Docker.
+    access: proxy
+    # Nome DNS do container Prometheus e sua porta interna.
+    url: http://prometheus:9090
+    # Define este datasource como padrão para novos painéis.
+    isDefault: true
+    # Evita alterações acidentais pela interface do Grafana.
+    editable: false

@@ -1,0 +1,22 @@
+# Versão do formato de provisionamento aceito pelo Grafana.
+apiVersion: 1
+
+# Providers informam ao Grafana onde encontrar dashboards versionados.
+providers:
+  # Provider responsável pelos dashboards do Projeto Korp.
+  - name: Korp dashboards
+    # ID da organização padrão criada pelo Grafana.
+    orgId: 1
+    # Pasta exibida na navegação do Grafana.
+    folder: Projeto Korp
+    # Carrega dashboards a partir de arquivos locais.
+    type: file
+    # Não permite que a sincronização remova o dashboard provisionado.
+    disableDeletion: true
+    # Faz o arquivo versionado prevalecer sobre alterações salvas na interface.
+    allowUiUpdates: false
+    # Verifica alterações no arquivo a cada 30 segundos.
+    updateIntervalSeconds: 30
+    # Diretório montado pelo Docker com os arquivos JSON dos dashboards.
+    options:
+      path: /var/lib/grafana/dashboards

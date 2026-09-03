@@ -1,0 +1,198 @@
+---
+# Playbook completo para um host Linux: Docker, rede, aplicacao e monitoramento.
+- name: Provisionar Projeto Korp
+  hosts: app
+  become: true
+  gather_facts: false
+
+  vars:
+    # Diretorio fixo onde o codigo sera instalado no host remoto.
+    app_dir: /opt/go-service-provisioning
+    # Usuario que executara os containers sem precisar de sudo.
+    deploy_user: "{{ ansible_user | default(ansible_user_id) }}"
+    # Defina false para hosts que ja possuem Docker, incluindo Docker externo.
+    install_docker: false
+    # Defina false em containers que usam um daemon Docker externo.
+    manage_docker_service: false
+
+  # Aguarda o host remoto estar acessivel antes das tarefas de provisionamento.
+  pre_tasks:
+    - name: Aguardar conexao SSH do host Linux
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    # Instala Python antes das tarefas baseadas em modulos Ansible.
+    - name: Garantir Python no host Linux
+      ansible.builtin.raw: >-
+        if command -v python3 >/dev/null 2>&1; then exit 0;
+        elif command -v apt-get >/dev/null 2>&1; then
+        apt-get update -y && apt-get install -y python3 python3-apt;
+        elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y python3 python3-dnf;
+        elif command -v apk >/dev/null 2>&1; then
+        apk add --no-cache python3;
+        else echo 'Distribuicao Linux nao suportada' >&2; exit 1; fi
+      changed_when: false
+
+    # Coleta facts depois que o interpretador remoto esta disponivel.
+    - name: Coletar facts do host
+      ansible.builtin.setup:
+
+  tasks:
+    # Atualiza o indice de pacotes antes da instalacao em Debian/Ubuntu.
+    - name: Atualizar cache APT
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when:
+        - install_docker | bool
+        - ansible_facts.os_family == 'Debian'
+
+    # Instala Docker Engine e Compose v2 em Debian/Ubuntu.
+    - name: Instalar Docker e dependencias
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+          - git
+          - ca-certificates
+        state: present
+      when:
+        - install_docker | bool
+        - ansible_facts.os_family == 'Debian'
+
+    # Instala Docker Engine e o plugin Compose em RHEL-like.
+    - name: Instalar Docker em RedHat
+      ansible.builtin.dnf:
+        name:
+          - docker
+          - docker-compose-plugin
+        state: present
+      when:
+        - install_docker | bool
+        - ansible_facts.os_family == 'RedHat'
+
+    # Interrompe com uma mensagem clara em outras distribuicoes sem Docker.
+    - name: Verificar Docker em sistemas nao Debian ou RedHat
+      ansible.builtin.command: docker --version
+      when:
+        - install_docker | bool
+        - ansible_facts.os_family not in ['Debian', 'RedHat']
+
+    # Garante que o daemon esteja iniciado e habilitado no boot.
+    - name: Habilitar e iniciar Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+      when: manage_docker_service | bool
+
+    # Permite que o usuario remoto execute comandos Docker sem sudo.
+    - name: Adicionar usuario de deploy ao grupo docker
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: true
+      when: install_docker | bool
+
+    # Cria a rede solicitada antes de subir os servicos.
+    - name: Criar rede Docker korp-network
+      ansible.builtin.command:
+        cmd: docker network create korp-network
+      register: docker_network
+      changed_when: docker_network.rc == 0
+      failed_when: docker_network.rc != 0 and 'already exists' not in docker_network.stderr
+
+    # Cria o diretorio que recebera o projeto e suas configuracoes.
+    - name: Criar diretorio da aplicacao
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0755"
+
+    # Copia os arquivos usados pelo build da imagem e pelo Compose.
+    - name: Copiar arquivos principais do projeto
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../{{ item }}"
+        dest: "{{ app_dir }}/{{ item }}"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+        directory_mode: "0755"
+      loop:
+        - Dockerfile
+        - docker-compose.yml
+        - main.go
+        - go.mod
+
+    # Copia a configuracao do proxy reverso.
+    - name: Copiar configuracao do Nginx
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../nginx/"
+        dest: "{{ app_dir }}/nginx/"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+        directory_mode: "0755"
+
+    # Copia a configuracao de coleta do Prometheus.
+    - name: Copiar configuracao do Prometheus
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../prometheus/"
+        dest: "{{ app_dir }}/prometheus/"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+        directory_mode: "0755"
+
+    # Copia datasource, provider e dashboard do Grafana.
+    - name: Copiar configuracao do Grafana
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../grafana/"
+        dest: "{{ app_dir }}/grafana/"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+        directory_mode: "0755"
+
+    # Faz build da imagem Go e inicia todos os containers da stack como root.
+    # Isso evita depender da atualizacao da sessao apos adicionar o usuario ao
+    # grupo docker durante a mesma execucao do playbook.
+    - name: Construir imagem e executar Docker Compose
+      become_user: root
+      ansible.builtin.command:
+        cmd: docker compose up -d --build --remove-orphans
+        chdir: "{{ app_dir }}"
+      register: compose_result
+      changed_when: true
+
+    # Aguarda a porta publica do proxy estar aceitando conexoes.
+    - name: Aguardar Nginx responder
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 80
+        delay: 5
+        timeout: 60
+
+    # Confirma o health check da aplicacao pelo proxy reverso.
+    - name: Validar health check da aplicacao
+      ansible.builtin.uri:
+        url: http://127.0.0.1/health
+        status_code: 200
+        return_content: true
+      register: health_response
+
+    # Consulta o endpoint exigido pelo desafio e guarda sua resposta JSON.
+    - name: Validar endpoint principal da aplicacao
+      ansible.builtin.uri:
+        url: http://127.0.0.1/projeto-korp
+        status_code: 200
+        return_content: true
+      register: service_response
+
+    # Exibe no terminal a resposta produzida pelo servico apos o provisionamento.
+    - name: Exibir resposta da aplicacao
+      ansible.builtin.debug:
+        msg: "Resposta do servico: {{ service_response.content }}"

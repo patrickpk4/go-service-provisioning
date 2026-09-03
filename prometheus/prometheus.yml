@@ -1,0 +1,23 @@
+# Configurações globais aplicadas à coleta de métricas.
+global:
+  # Intervalo entre duas coletas do serviço.
+  scrape_interval: 5s
+  # Intervalo para avaliar regras do Prometheus, se forem adicionadas.
+  evaluation_interval: 5s
+
+# Lista de aplicações monitoradas pelo Prometheus.
+scrape_configs:
+  # Nome usado para identificar a aplicação nas consultas e na interface.
+  - job_name: http-server-projeto-korp
+    # Caminho HTTP que publica as métricas no formato Prometheus.
+    metrics_path: /metrics
+    # Endereço DNS interno e porta do serviço na rede Docker.
+    static_configs:
+      - targets:
+          - http-server-projeto-korp:8080
+
+  # Job que coleta as metricas do Nginx por meio do exporter.
+  - job_name: nginx
+    static_configs:
+      - targets:
+          - nginx-exporter:9113
