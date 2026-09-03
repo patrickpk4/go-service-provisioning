@@ -43,33 +43,20 @@ host.
 
 ## Pré-requisitos
 
-Execução local com Docker Compose:
+O único procedimento de instalação e execução documentado é o provisionamento
+com Ansible. O host de destino deve ser Linux, possuir acesso administrativo
+via `sudo` e ter conectividade com os repositórios de pacotes e as imagens
+Docker. O Ansible é instalado somente na máquina de controle.
 
-- Docker Engine;
-- Docker Compose v2;
-- `curl`.
-
-Execução com Ansible:
-
-- host Linux com Docker instalado ou com gerenciador de pacotes suportado;
-- Ansible instalado;
-- usuário com acesso administrativo via `sudo`.
-
-## Execução local
+Instale o Ansible no Ubuntu:
 
 ```bash
-docker compose up -d --build
-docker compose ps
-curl http://localhost:80/projeto-korp
+sudo apt update
+sudo apt install -y ansible
 ```
 
-Resposta esperada:
-
-```json
-{"horario":"03/09/2026 18:07:35","nome":"Projeto Korp"}
-```
-
-O campo `horario` é calculado dinamicamente em UTC a cada requisição.
+O playbook instala automaticamente Python, Docker e Docker Compose no host de
+destino. Não é necessário instalar esses componentes manualmente.
 
 ## Monitoramento
 
@@ -96,7 +83,7 @@ Métricas monitoradas:
 - `http_request_duration_seconds`: histograma de duração.
 
 
-## Provisionamento com Ansible
+## Instalação e provisionamento com Ansible
 
 O playbook [ansible/site.yml](ansible/site.yml) automatiza o ambiente completo
 em um host Ubuntu: instala Python, Docker e Compose, cria a rede bridge,
@@ -104,15 +91,9 @@ copia os arquivos, constrói a imagem, configura Nginx, Prometheus e Grafana,
 inicia a stack, valida o serviço e exibe no console a resposta JSON do endpoint
 `/projeto-korp`.
 
-Para executar na máquina Ubuntu local, instale o Ansible e crie o inventário:
-
-```bash
-sudo apt update
-sudo apt install -y ansible
-cp ansible/inventory.ini.example ansible/inventory.ini
-```
-
-Troque `SEU_USUARIO` pelo seu usuário Linux. Depois, este é o comando único que
+Para executar na máquina Ubuntu local
+no arquivo inventory.ini
+Troque `ansible_user` pelo seu usuário Linux. Depois, este é o comando único que
 instala e configura toda a stack:
 
 ```bash
@@ -138,11 +119,24 @@ Quando o Docker já estiver disponível, defina `install_docker=false` e
 `manage_docker_service=false` para o host no inventário. Para um host remoto,
 substitua `localhost` pelo endereço e informe a chave SSH com `--private-key`.
 
+Após a execução, o serviço estará disponível em:
+
+```bash
+curl http://localhost:80/projeto-korp
+```
+
+Resposta esperada:
+
+```json
+{"horario":"03/09/2026 18:07:35","nome":"Projeto Korp"}
+```
+
+O campo `horario` é calculado dinamicamente em UTC a cada requisição.
+
 ## Testes e validações
 
 ```bash
 go test ./... -race -cover
-docker compose config
 python3 -m json.tool grafana/dashboards/projeto-korp.json
 ```
 
@@ -169,9 +163,3 @@ python3 -m json.tool grafana/dashboards/projeto-korp.json
 - Os comentários dos arquivos de configuração usam `#`. Os arquivos Go não
   possuem comentários, pois `#` não é aceito pela linguagem Go.
 
-## Limpeza
-
-```bash
-docker compose down
-docker compose down --volumes
-```
