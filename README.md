@@ -10,7 +10,6 @@ Serviço HTTP em Go, executado em containers Docker e acessível por meio de um
 proxy reverso Nginx. O projeto inclui monitoramento com Prometheus e Grafana e
 provisionamento automatizado com Ansible.
 
-> **Documentação técnica:** [guia completo de decisões técnicas em PDF](docs/decisoes-tecnicas.pdf) | [versão Markdown](docs/decisoes-tecnicas.md) | [defesa técnica para entrevista](docs/defesa-tecnica-entrevista.md)
 
 ## Visão geral
 
@@ -91,8 +90,7 @@ copia os arquivos, constrói a imagem, configura Nginx, Prometheus e Grafana,
 inicia a stack, valida o serviço e exibe no console a resposta JSON do endpoint
 `/projeto-korp`.
 
-Para executar na máquina Ubuntu local
-no arquivo inventory.ini
+Para executar na máquina Ubuntu local, no arquivo inventory.ini
 Troque `ansible_user` pelo seu usuário Linux. Depois, este é o comando único que
 instala e configura toda a stack:
 
@@ -128,7 +126,7 @@ curl http://localhost:80/projeto-korp
 Resposta esperada:
 
 ```json
-{"horario":"03/09/2026 18:07:35","nome":"Projeto Korp"}
+{"horario":"18:07:35","nome":"Projeto Korp"}
 ```
 
 O campo `horario` é calculado dinamicamente em UTC a cada requisição.

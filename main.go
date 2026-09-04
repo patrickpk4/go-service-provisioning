@@ -148,7 +148,7 @@ func projetoKorpHandler(w http.ResponseWriter, r *http.Request) {
 	// .UTC() converte esse horário para o padrão UTC.
 	// Isso é feito aqui dentro da função para que o horário seja
 	// sempre calculado no momento exato da requisição.
-	horarioAtual := time.Now().UTC().Format("02/01/2006 15:04:05")
+	horarioAtual := time.Now().UTC().Format("15:04:05")
 
 	// Cria um map que será convertido em um objeto JSON na resposta.
 	resposta := map[string]string{
